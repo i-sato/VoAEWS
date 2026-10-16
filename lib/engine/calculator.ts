@@ -31,7 +31,7 @@ export function calculateBatchStats(
       confidenceScore: 100,
       bottlenecks: [],
       moduleBreakdowns: [],
-      lastCalculatedAt: new Date().toISOString(),
+      lastCalculatedAt: batch.lastSyncTime || '2026-10-15T20:25:00Z',
     };
   }
 
@@ -143,7 +143,7 @@ export function calculateBatchStats(
     confidenceScore,
     bottlenecks,
     moduleBreakdowns,
-    lastCalculatedAt: new Date().toISOString(),
+    lastCalculatedAt: batch.lastSyncTime || '2026-10-15T20:25:00Z',
   };
 }
 

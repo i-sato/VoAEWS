@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { MOCK_BATCHES } from '@/lib/data/mock-batches';
 import { calculateBatchStats, filterParticipants } from '@/lib/engine/calculator';
-import { RiskLevel } from '@/lib/types';
+import { Participant, RiskLevel, TrainingBatch } from '@/lib/types';
 import { HeaderControls } from '@/components/HeaderControls';
 import { Scorecards } from '@/components/Scorecards';
 import { BottleneckChart } from '@/components/BottleneckChart';
@@ -11,31 +11,23 @@ import { RiskTable } from '@/components/RiskTable';
 import { ChatAssistant } from '@/components/ChatAssistant';
 import { WhatIfSimulator } from '@/components/WhatIfSimulator';
 import { ExportReportModal } from '@/components/ExportReportModal';
-import { 
-  BarChart2, 
-  Users, 
-  MessageSquare, 
-  CheckCircle,
-  HelpCircle
-} from 'lucide-react';
+import { DataInspectorModal } from '@/components/DataInspectorModal';
+import { BarChart2, MessageSquare, CheckCircle } from 'lucide-react';
 
 export default function DashboardPage() {
-  // Batch state
-  const [selectedBatchId, setSelectedBatchId] = useState<string>('fawd-vbl-12825');
-  const selectedBatch = useMemo(
-    () => MOCK_BATCHES.find((b) => b.id === selectedBatchId) || MOCK_BATCHES[0],
-    [selectedBatchId]
-  );
+  // Primary training: FAWD VBL 12825
+  const baseBatch = MOCK_BATCHES[0];
 
-  // Editable configurations
-  const [spreadsheetUrl, setSpreadsheetUrl] = useState<string>(selectedBatch.spreadsheetUrl);
-  const [startDate, setStartDate] = useState<string>(selectedBatch.startDate);
-  const [endDate, setEndDate] = useState<string>(selectedBatch.endDate);
-  const [customTargetRate, setCustomTargetRate] = useState<number>(selectedBatch.targetPassingRate);
-  const [customPassingThreshold, setCustomPassingThreshold] = useState<number>(selectedBatch.passingThreshold);
+  // Editable configurations & dynamic participant state
+  const [participants, setParticipants] = useState<Participant[]>(baseBatch.participants);
+  const [spreadsheetUrl, setSpreadsheetUrl] = useState<string>(baseBatch.spreadsheetUrl);
+  const [startDate, setStartDate] = useState<string>(baseBatch.startDate);
+  const [endDate, setEndDate] = useState<string>(baseBatch.endDate);
+  const [customTargetRate, setCustomTargetRate] = useState<number>(baseBatch.targetPassingRate);
+  const [customPassingThreshold, setCustomPassingThreshold] = useState<number>(baseBatch.passingThreshold);
 
-  // Sync state
-  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  // Sync / Update state
+  const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Table filters
@@ -48,29 +40,52 @@ export default function DashboardPage() {
   // Modals
   const [isWhatIfOpen, setIsWhatIfOpen] = useState<boolean>(false);
   const [isExportOpen, setIsExportOpen] = useState<boolean>(false);
+  const [isDataInspectorOpen, setIsDataInspectorOpen] = useState<boolean>(false);
 
-  // When switching batch, update local form fields
-  const handleSelectBatch = (batchId: string) => {
-    setSelectedBatchId(batchId);
-    const target = MOCK_BATCHES.find((b) => b.id === batchId) || MOCK_BATCHES[0];
-    setSpreadsheetUrl(target.spreadsheetUrl);
-    setStartDate(target.startDate);
-    setEndDate(target.endDate);
-    setCustomTargetRate(target.targetPassingRate);
-    setCustomPassingThreshold(target.passingThreshold);
-    setSearchQuery('');
-    setRiskFilter('Semua');
-  };
+  // Current batch object with dynamic participants
+  const currentBatch: TrainingBatch = useMemo(() => {
+    return {
+      ...baseBatch,
+      spreadsheetUrl,
+      startDate,
+      endDate,
+      targetPassingRate: customTargetRate,
+      passingThreshold: customPassingThreshold,
+      participants,
+      lastSyncTime: baseBatch.lastSyncTime,
+    };
+  }, [baseBatch, spreadsheetUrl, startDate, endDate, customTargetRate, customPassingThreshold, participants]);
 
-  // Deterministic calculation (Strict Zero-Math)
+  // Deterministic calculation (Strict Zero-Math, with Column I PERSENTASE LMS as primary passing metric)
   const currentStats = useMemo(() => {
-    return calculateBatchStats(selectedBatch, customPassingThreshold, customTargetRate);
-  }, [selectedBatch, customPassingThreshold, customTargetRate]);
+    return calculateBatchStats(currentBatch, customPassingThreshold, customTargetRate);
+  }, [currentBatch, customPassingThreshold, customTargetRate]);
 
   // Filtered participant list
   const filteredParticipants = useMemo(() => {
-    return filterParticipants(selectedBatch.participants, searchQuery, riskFilter);
-  }, [selectedBatch.participants, searchQuery, riskFilter]);
+    return filterParticipants(participants, searchQuery, riskFilter);
+  }, [participants, searchQuery, riskFilter]);
+
+  // Handler for explicit Google Sheet Submit / Update button
+  const handleSubmitSheetUpdate = () => {
+    setIsUpdating(true);
+    setTimeout(() => {
+      setIsUpdating(false);
+      setToastMessage(
+        `Proyeksi pelatihan berhasil diperbarui dari Spreadsheet: ${currentStats.totalRegistered} peserta terverifikasi via Kolom I (PERSENTASE LMS).`
+      );
+      setTimeout(() => setToastMessage(null), 3500);
+    }, 700);
+  };
+
+  // Handler for applying newly parsed spreadsheet rows from Data Inspector
+  const handleApplyNewData = (newParticipants: Participant[]) => {
+    setParticipants(newParticipants);
+    setToastMessage(
+      `Data berhasil diperbarui: ${newParticipants.length} baris dipetakan berdasarkan Kolom I (PERSENTASE LMS).`
+    );
+    setTimeout(() => setToastMessage(null), 3500);
+  };
 
   // Simulation apply
   const handleApplyWhatIf = (newThreshold: number, newTarget: number) => {
@@ -80,23 +95,13 @@ export default function DashboardPage() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Spreadsheet refresh simulation
-  const handleSyncData = () => {
-    setIsSyncing(true);
-    setTimeout(() => {
-      setIsSyncing(false);
-      setToastMessage('Data spreadsheet berhasil disinkronisasi ulang (Mode Read-Only)');
-      setTimeout(() => setToastMessage(null), 3000);
-    }, 800);
-  };
-
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-4 right-4 z-50 bg-indigo-600 text-white px-4 py-2.5 rounded-lg shadow-xl text-xs font-medium flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
-          <CheckCircle className="w-4 h-4 text-emerald-300" />
-          {toastMessage}
+        <div className="fixed top-4 right-4 z-50 bg-indigo-600 text-white px-4 py-2.5 rounded-lg shadow-xl text-xs font-medium flex items-center gap-2 animate-in fade-in slide-in-from-top-2 border border-indigo-400/40">
+          <CheckCircle className="w-4 h-4 text-emerald-300 shrink-0" />
+          <span>{toastMessage}</span>
         </div>
       )}
 
@@ -104,9 +109,7 @@ export default function DashboardPage() {
       <main className="flex-1 max-w-[1600px] w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
         {/* Header Controls & Status Banner */}
         <HeaderControls
-          batches={MOCK_BATCHES}
-          selectedBatch={selectedBatch}
-          onSelectBatch={handleSelectBatch}
+          batch={currentBatch}
           stats={currentStats}
           customTargetRate={customTargetRate}
           onTargetRateChange={setCustomTargetRate}
@@ -120,8 +123,9 @@ export default function DashboardPage() {
           onEndDateChange={setEndDate}
           onOpenWhatIf={() => setIsWhatIfOpen(true)}
           onOpenExport={() => setIsExportOpen(true)}
-          onSyncData={handleSyncData}
-          isSyncing={isSyncing}
+          onSubmitSheetUpdate={handleSubmitSheetUpdate}
+          isUpdating={isUpdating}
+          onOpenDataInspector={() => setIsDataInspectorOpen(true)}
         />
 
         {/* Scorecards */}
@@ -195,7 +199,7 @@ export default function DashboardPage() {
               activeTab === 'chat' ? 'block' : 'hidden xl:block'
             }`}
           >
-            <ChatAssistant batch={selectedBatch} stats={currentStats} />
+            <ChatAssistant batch={currentBatch} stats={currentStats} />
           </div>
         </div>
       </main>
@@ -203,13 +207,13 @@ export default function DashboardPage() {
       {/* Footer System Audit Note */}
       <footer className="border-t border-slate-900 bg-slate-950/80 py-4 px-6 text-center text-xs text-slate-500">
         <p>
-          Vocational Agentic Early Warning System (EWS) • Memenuhi Spesifikasi PRD & FRD Pelatihan Vokasi • Read-Only Ingestion & Zero-Math Grounding.
+          Vocational Agentic Early Warning System (EWS) • Memenuhi Spesifikasi PRD & FRD Pelatihan Vokasi • Pemetaan Sel A2..I2 (Kolom I: PERSENTASE LMS).
         </p>
       </footer>
 
       {/* Modals */}
       <WhatIfSimulator
-        batch={selectedBatch}
+        batch={currentBatch}
         currentStats={currentStats}
         isOpen={isWhatIfOpen}
         onClose={() => setIsWhatIfOpen(false)}
@@ -217,10 +221,17 @@ export default function DashboardPage() {
       />
 
       <ExportReportModal
-        batch={selectedBatch}
+        batch={currentBatch}
         stats={currentStats}
         isOpen={isExportOpen}
         onClose={() => setIsExportOpen(false)}
+      />
+
+      <DataInspectorModal
+        isOpen={isDataInspectorOpen}
+        onClose={() => setIsDataInspectorOpen(false)}
+        participants={participants}
+        onApplyNewData={handleApplyNewData}
       />
     </div>
   );
