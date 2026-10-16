@@ -34,8 +34,8 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ batch, stats }) =>
     {
       id: 'welcome',
       sender: 'assistant',
-      timestamp: '20:25 WIB',
-      narrative_summary: `Selamat datang di Vocational EWS Intelligence Engine. Batch ${batch.code} saat ini berstatus ${stats.batchStatus} dengan proyeksi kelulusan ${stats.projectedPassRate}% (target ${stats.targetPassingRate}%) dan 11 peserta berisiko tinggi.`,
+      timestamp: '11:43 WIB',
+      narrative_summary: `Selamat datang di Vocational EWS Intelligence Engine. Pelatihan ${batch.name} (${batch.code}) saat ini berstatus ${stats.batchStatus} dengan proyeksi kelulusan ${stats.projectedPassRate}% (target ${stats.targetPassingRate}%) dan ${stats.highRiskCount} peserta terdeteksi berisiko/macet.`,
       ui_payload: {
         status_badge: {
           status: stats.batchStatus,

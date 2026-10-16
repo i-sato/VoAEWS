@@ -1,3 +1,4 @@
 {
+  "/api/analyze-sheet/route": "app/api/analyze-sheet/route.js",
   "/page": "app/page.js"
 }

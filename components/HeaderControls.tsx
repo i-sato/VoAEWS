@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { TrainingBatch, DeterministicBatchStats } from '@/lib/types';
 import { 
   ShieldCheck, 
@@ -15,8 +15,8 @@ import {
   ExternalLink,
   Layers,
   HelpCircle,
-  Sparkles,
-  UploadCloud
+  UploadCloud,
+  FileSpreadsheet
 } from 'lucide-react';
 
 interface HeaderControlsProps {
@@ -37,6 +37,8 @@ interface HeaderControlsProps {
   onSubmitSheetUpdate: () => void;
   isUpdating: boolean;
   onOpenDataInspector?: () => void;
+  onOpenUploadModal: () => void;
+  activeDataSourceName?: string;
 }
 
 export const HeaderControls: React.FC<HeaderControlsProps> = ({
@@ -55,8 +57,11 @@ export const HeaderControls: React.FC<HeaderControlsProps> = ({
   onSubmitSheetUpdate,
   isUpdating,
   onOpenDataInspector,
+  onOpenUploadModal,
+  activeDataSourceName,
 }) => {
   const [showColSchema, setShowColSchema] = useState(false);
+  const [sourceType, setSourceType] = useState<'url' | 'upload'>('url');
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -112,6 +117,16 @@ export const HeaderControls: React.FC<HeaderControlsProps> = ({
 
         {/* Global Quick Action Controls */}
         <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          {/* Direct File Upload Action */}
+          <button
+            onClick={onOpenUploadModal}
+            type="button"
+            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition shadow-sm"
+          >
+            <UploadCloud className="w-4 h-4 text-white" />
+            Unggah Berkas Sheet (.xlsx/.csv)
+          </button>
+
           {onOpenDataInspector && (
             <button
               onClick={onOpenDataInspector}
@@ -144,7 +159,7 @@ export const HeaderControls: React.FC<HeaderControlsProps> = ({
       {/* Configuration Grid: Source Spreadsheet with Submit/Update button, Dates & Target */}
       <div className="bg-slate-900/90 rounded-xl p-4 border border-slate-800 shadow-lg space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-3.5 items-end">
-          {/* Active Training Info (No dropdown as requested) */}
+          {/* Active Training Info */}
           <div className="lg:col-span-3 space-y-1.5">
             <span className="text-xs font-medium text-slate-300 flex items-center justify-between">
               <span>Pelatihan Vokasi Aktif</span>
@@ -156,13 +171,37 @@ export const HeaderControls: React.FC<HeaderControlsProps> = ({
             </div>
           </div>
 
-          {/* Spreadsheet URL Input WITH PROMINENT UPDATE / SUBMIT BUTTON */}
+          {/* Spreadsheet Source Section: Dual Mode (URL vs Uploaded File) */}
           <div className="lg:col-span-5 space-y-1.5">
             <div className="flex items-center justify-between text-xs font-medium text-slate-300">
-              <span className="flex items-center gap-1.5">
-                <Database className="w-3.5 h-3.5 text-indigo-400" />
-                Link Google Spreadsheet Sumber Data
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="flex items-center gap-1.5">
+                  <Database className="w-3.5 h-3.5 text-indigo-400" />
+                  Sumber Data:
+                </span>
+                {/* Source Mode Switcher */}
+                <div className="inline-flex rounded-md bg-slate-950 p-0.5 border border-slate-800 text-[10px]">
+                  <button
+                    type="button"
+                    onClick={() => setSourceType('url')}
+                    className={`px-2 py-0.5 rounded font-medium transition ${
+                      sourceType === 'url' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Link URL Sheet
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSourceType('upload')}
+                    className={`px-2 py-0.5 rounded font-medium transition ${
+                      sourceType === 'upload' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Unggah Berkas
+                  </button>
+                </div>
+              </div>
+
               <button
                 type="button"
                 onClick={() => setShowColSchema(!showColSchema)}
@@ -170,43 +209,71 @@ export const HeaderControls: React.FC<HeaderControlsProps> = ({
                 title="Lihat pemetaan cell A2..I2"
               >
                 <HelpCircle className="w-3 h-3" />
-                Skema Kolom (A2..I2)
+                Skema (A2..I2)
               </button>
             </div>
             
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <input
-                  type="text"
-                  value={spreadsheetUrl}
-                  onChange={(e) => onSpreadsheetUrlChange(e.target.value)}
-                  placeholder="https://docs.google.com/spreadsheets/d/..."
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-3 pr-16 py-2 text-xs text-slate-200 font-mono focus:outline-none focus:border-indigo-500 transition"
-                />
-                <a
-                  href={spreadsheetUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  title="Buka link spreadsheet (read-only)"
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2 py-1 text-[10px] text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded flex items-center gap-1"
-                >
-                  <ExternalLink className="w-3 h-3" />
-                  Buka
-                </a>
-              </div>
+            {sourceType === 'url' ? (
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={spreadsheetUrl}
+                    onChange={(e) => onSpreadsheetUrlChange(e.target.value)}
+                    placeholder="https://docs.google.com/spreadsheets/d/..."
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-3 pr-16 py-2 text-xs text-slate-200 font-mono focus:outline-none focus:border-indigo-500 transition"
+                  />
+                  <a
+                    href={spreadsheetUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="Buka link spreadsheet (read-only)"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2 py-1 text-[10px] text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded flex items-center gap-1"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    Buka
+                  </a>
+                </div>
 
-              {/* Dedicated Update / Submit Button Required by User */}
-              <button
-                type="button"
-                onClick={onSubmitSheetUpdate}
-                disabled={isUpdating}
-                className="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-medium flex items-center gap-1.5 shrink-0 transition shadow-md active:scale-95"
-                title="Submit link dan perbarui proyeksi pelatihan"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isUpdating ? 'animate-spin' : ''}`} />
-                {isUpdating ? 'Memproses...' : 'Perbarui Proyeksi'}
-              </button>
-            </div>
+                {/* Dedicated Update / Submit Button Required by User */}
+                <button
+                  type="button"
+                  onClick={onSubmitSheetUpdate}
+                  disabled={isUpdating}
+                  className="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-medium flex items-center gap-1.5 shrink-0 transition shadow-md active:scale-95"
+                  title="Submit link dan perbarui proyeksi pelatihan"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isUpdating ? 'animate-spin' : ''}`} />
+                  {isUpdating ? 'Memproses...' : 'Perbarui Proyeksi'}
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <div 
+                  onClick={onOpenUploadModal}
+                  className="flex-1 bg-slate-950 border border-dashed border-indigo-500/60 hover:border-indigo-500 rounded-lg px-3 py-2 text-xs text-slate-300 flex items-center justify-between cursor-pointer transition"
+                >
+                  <span className="flex items-center gap-2 truncate">
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span className="truncate">
+                      {activeDataSourceName || 'Pilih berkas Excel (.xlsx) atau CSV (.csv)'}
+                    </span>
+                  </span>
+                  <span className="text-[10px] bg-indigo-950 text-indigo-300 px-2 py-0.5 rounded border border-indigo-800 shrink-0">
+                    Pilih File
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={onOpenUploadModal}
+                  className="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium flex items-center gap-1.5 shrink-0 transition shadow-md"
+                >
+                  <UploadCloud className="w-3.5 h-3.5" />
+                  Unggah Baru
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Date Range Start & End */}
@@ -259,7 +326,7 @@ export const HeaderControls: React.FC<HeaderControlsProps> = ({
           <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 text-xs space-y-1.5 animate-in fade-in">
             <div className="flex items-center justify-between">
               <span className="font-semibold text-indigo-300 font-mono">
-                Aturan Pemetaan Kolom Spreadsheet (Mulai Baris 2):
+                Aturan Pemetaan Kolom Spreadsheet / Excel (Mulai Baris 2):
               </span>
               <button
                 type="button"
@@ -323,7 +390,7 @@ export const HeaderControls: React.FC<HeaderControlsProps> = ({
           </div>
 
           <div suppressHydrationWarning className="text-[11px] opacity-75 shrink-0 text-right font-mono sm:self-center">
-            Pembaruan Terakhir: 20:25 WIB
+            Pembaruan Terakhir: 13 Okt, 11:43 WIB
           </div>
         </div>
       </div>

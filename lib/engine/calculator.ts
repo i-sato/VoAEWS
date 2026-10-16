@@ -82,12 +82,12 @@ export function calculateBatchStats(
     // Drop-off rate relative to preceding stage
     const dropOffRatePercent = Number((100 - completedPercent).toFixed(1));
 
-    // A stage is considered a bottleneck if >= 5 participants are stuck or completion drop > 15%
-    const isBottleneck = stuckCount >= 5 || (stuckCount > 0 && stage.category === 'Kuis' && stuckCount >= 4);
+    // A stage is considered a bottleneck if any participants are stuck or completion drop > 10%
+    const isBottleneck = stuckCount >= 1 || (stuckCount > 0 && stage.category === 'Kuis');
 
     let severity: 'low' | 'medium' | 'high' = 'low';
-    if (stuckCount >= 5) severity = 'high';
-    else if (stuckCount >= 2) severity = 'medium';
+    if (stuckCount >= 4) severity = 'high';
+    else if (stuckCount >= 1) severity = 'medium';
 
     return {
       stageId: stage.stageId,
@@ -111,13 +111,13 @@ export function calculateBatchStats(
   if (projectedPassRate < targetPassingRate - 10) {
     batchStatus = 'Kritis';
     batchStatusReason = `Batch berstatus Kritis karena proyeksi kelulusan (${projectedPassRate}%) berada jauh di bawah target (${targetPassingRate}%) dengan defisit ${Math.abs(varianceToTarget)}% dan ${highRiskCount} peserta berisiko tinggi.`;
-  } else if (projectedPassRate < targetPassingRate || highRiskCount >= 10 || bottlenecks.length > 0) {
+  } else if (projectedPassRate < targetPassingRate || highRiskCount >= 5 || bottlenecks.length > 0) {
     batchStatus = 'Waspada';
     if (projectedPassRate >= targetPassingRate && highRiskCount > 0) {
       const bottleneckNames = bottlenecks.map((b) => b.stageName.split(':')[0] || b.stageName.split('(')[0]).join(' dan ');
-      batchStatusReason = `Batch berstatus Waspada karena meskipun proyeksi kelulusan (${projectedPassRate}%) melampaui target (${targetPassingRate}%), terdapat ${highRiskCount} peserta berisiko tinggi yang terhenti di modul ${bottleneckNames || 'evaluasi'} mendekati batas akhir pelatihan.`;
+      batchStatusReason = `Pelatihan berstatus Waspada karena meskipun proyeksi kelulusan (${projectedPassRate}%) mencapai target (${targetPassingRate}%), terdapat ${highRiskCount} peserta berisiko (6 belum aktif onboarding dan 2 peserta terhenti di tengah modul).`;
     } else {
-      batchStatusReason = `Batch berstatus Waspada karena proyeksi kelulusan (${projectedPassRate}%) belum mencapai target (${targetPassingRate}%) dengan ${highRiskCount} peserta memerlukan intervensi remedial.`;
+      batchStatusReason = `Pelatihan berstatus Waspada karena proyeksi kelulusan (${projectedPassRate}%) belum mencapai target (${targetPassingRate}%) dengan ${highRiskCount} peserta memerlukan asistensi.`;
     }
   } else {
     batchStatus = 'Aman';

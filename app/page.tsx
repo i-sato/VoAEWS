@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { MOCK_BATCHES } from '@/lib/data/mock-batches';
 import { calculateBatchStats, filterParticipants } from '@/lib/engine/calculator';
 import { Participant, RiskLevel, TrainingBatch } from '@/lib/types';
@@ -12,6 +12,10 @@ import { ChatAssistant } from '@/components/ChatAssistant';
 import { WhatIfSimulator } from '@/components/WhatIfSimulator';
 import { ExportReportModal } from '@/components/ExportReportModal';
 import { DataInspectorModal } from '@/components/DataInspectorModal';
+import { SheetUploadModal } from '@/components/SheetUploadModal';
+import { CellAnalysisPanel } from '@/components/CellAnalysisPanel';
+import { SheetAnalysisResponse } from '@/app/api/analyze-sheet/route';
+import { INITIAL_CELL_ANALYSIS } from '@/lib/engine/initial-analysis';
 import { BarChart2, MessageSquare, CheckCircle } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -21,6 +25,7 @@ export default function DashboardPage() {
   // Editable configurations & dynamic participant state
   const [participants, setParticipants] = useState<Participant[]>(baseBatch.participants);
   const [spreadsheetUrl, setSpreadsheetUrl] = useState<string>(baseBatch.spreadsheetUrl);
+  const [activeDataSourceName, setActiveDataSourceName] = useState<string>('');
   const [startDate, setStartDate] = useState<string>(baseBatch.startDate);
   const [endDate, setEndDate] = useState<string>(baseBatch.endDate);
   const [customTargetRate, setCustomTargetRate] = useState<number>(baseBatch.targetPassingRate);
@@ -29,6 +34,10 @@ export default function DashboardPage() {
   // Sync / Update state
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Gemini API Cell Analysis state (initialized with pure baseline analysis)
+  const [cellAnalysis, setCellAnalysis] = useState<SheetAnalysisResponse | null>(INITIAL_CELL_ANALYSIS);
+  const [isAnalyzingCells, setIsAnalyzingCells] = useState<boolean>(false);
 
   // Table filters
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -41,6 +50,7 @@ export default function DashboardPage() {
   const [isWhatIfOpen, setIsWhatIfOpen] = useState<boolean>(false);
   const [isExportOpen, setIsExportOpen] = useState<boolean>(false);
   const [isDataInspectorOpen, setIsDataInspectorOpen] = useState<boolean>(false);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState<boolean>(false);
 
   // Current batch object with dynamic participants
   const currentBatch: TrainingBatch = useMemo(() => {
@@ -66,14 +76,48 @@ export default function DashboardPage() {
     return filterParticipants(participants, searchQuery, riskFilter);
   }, [participants, searchQuery, riskFilter]);
 
+  // Function to run Gemini API analysis on available cell data
+  const triggerCellAnalysis = useCallback(async (dataParticipants: Participant[], sourceLabel?: string) => {
+    setIsAnalyzingCells(true);
+    try {
+      const stats = calculateBatchStats({
+        ...baseBatch,
+        participants: dataParticipants,
+        passingThreshold: customPassingThreshold,
+        targetPassingRate: customTargetRate,
+      }, customPassingThreshold, customTargetRate);
+
+      const res = await fetch('/api/analyze-sheet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          batchInfo: { name: baseBatch.name, code: baseBatch.code },
+          stats,
+          sampleParticipants: dataParticipants.slice(0, 25),
+          sourceName: sourceLabel || activeDataSourceName || 'Google Spreadsheet (FAWD VBL 12825)',
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setCellAnalysis(data);
+      }
+    } catch (err) {
+      console.error('Failed to analyze cells with Gemini API:', err);
+    } finally {
+      setIsAnalyzingCells(false);
+    }
+  }, [baseBatch, customPassingThreshold, customTargetRate, activeDataSourceName]);
+
   // Handler for explicit Google Sheet Submit / Update button
   const handleSubmitSheetUpdate = () => {
     setIsUpdating(true);
     setTimeout(() => {
       setIsUpdating(false);
       setToastMessage(
-        `Proyeksi pelatihan berhasil diperbarui dari Spreadsheet: ${currentStats.totalRegistered} peserta terverifikasi via Kolom I (PERSENTASE LMS).`
+        `Proyeksi pelatihan & visualisasi diperbarui dari Spreadsheet: ${currentStats.totalRegistered} peserta terverifikasi via Kolom I (PERSENTASE LMS).`
       );
+      triggerCellAnalysis(participants, `Tautan Google Sheet (${spreadsheetUrl.slice(0, 45)}...)`);
       setTimeout(() => setToastMessage(null), 3500);
     }, 700);
   };
@@ -82,9 +126,21 @@ export default function DashboardPage() {
   const handleApplyNewData = (newParticipants: Participant[]) => {
     setParticipants(newParticipants);
     setToastMessage(
-      `Data berhasil diperbarui: ${newParticipants.length} baris dipetakan berdasarkan Kolom I (PERSENTASE LMS).`
+      `Visualisasi & tabel diperbarui: ${newParticipants.length} baris dipetakan berdasarkan Kolom I (PERSENTASE LMS).`
     );
+    triggerCellAnalysis(newParticipants, 'Data Inspector Spreadsheet');
     setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // Handler for applying data uploaded from local file (.xlsx / .csv)
+  const handleApplyUploadedData = (newParticipants: Participant[], sourceInfo: string) => {
+    setParticipants(newParticipants);
+    setActiveDataSourceName(sourceInfo);
+    setToastMessage(
+      `Visualisasi & tabel diperbarui dari ${sourceInfo}: ${newParticipants.length} peserta dipetakan via Kolom I (PERSENTASE LMS).`
+    );
+    triggerCellAnalysis(newParticipants, sourceInfo);
+    setTimeout(() => setToastMessage(null), 4000);
   };
 
   // Simulation apply
@@ -126,6 +182,8 @@ export default function DashboardPage() {
           onSubmitSheetUpdate={handleSubmitSheetUpdate}
           isUpdating={isUpdating}
           onOpenDataInspector={() => setIsDataInspectorOpen(true)}
+          onOpenUploadModal={() => setIsUploadModalOpen(true)}
+          activeDataSourceName={activeDataSourceName}
         />
 
         {/* Scorecards */}
@@ -135,6 +193,15 @@ export default function DashboardPage() {
             setRiskFilter('Tinggi');
             setActiveTab('dashboard');
           }}
+        />
+
+        {/* Gemini API Cell Analysis Intelligence Panel */}
+        <CellAnalysisPanel
+          analysis={cellAnalysis}
+          isLoading={isAnalyzingCells}
+          onRefreshAnalysis={() => triggerCellAnalysis(participants, activeDataSourceName)}
+          sourceName={activeDataSourceName || 'Google Spreadsheet (FAWD VBL 12825)'}
+          totalEvaluatedCells={participants.length * 9}
         />
 
         {/* Tab Switcher for Smaller Screens */}
@@ -207,7 +274,7 @@ export default function DashboardPage() {
       {/* Footer System Audit Note */}
       <footer className="border-t border-slate-900 bg-slate-950/80 py-4 px-6 text-center text-xs text-slate-500">
         <p>
-          Vocational Agentic Early Warning System (EWS) • Memenuhi Spesifikasi PRD & FRD Pelatihan Vokasi • Pemetaan Sel A2..I2 (Kolom I: PERSENTASE LMS).
+          Vocational Agentic Early Warning System (EWS) • Memenuhi Spesifikasi PRD & FRD Pelatihan Vokasi • Pemetaan Sel A2..I2 (Kolom I: PERSENTASE LMS) • Didukung Gemini API Cell Intelligence.
         </p>
       </footer>
 
@@ -232,6 +299,13 @@ export default function DashboardPage() {
         onClose={() => setIsDataInspectorOpen(false)}
         participants={participants}
         onApplyNewData={handleApplyNewData}
+      />
+
+      {/* Alternative File Upload Modal */}
+      <SheetUploadModal
+        isOpen={isUploadModalOpen}
+        onClose={() => setIsUploadModalOpen(false)}
+        onApplyData={handleApplyUploadedData}
       />
     </div>
   );
