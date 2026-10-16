@@ -1,0 +1,6 @@
+{
+  "name": "Vocational Agentic Early Warning System (EWS)",
+  "description": "Dashboard intelijen analitik pemantauan pelatihan vokasi dengan zero-math accuracy, deteksi risiko peserta, dan AI chat pendampingan koordinator.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
